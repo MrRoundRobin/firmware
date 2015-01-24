@@ -14,12 +14,12 @@ namespace ArtNet
         OPCODE_ADDRESS = 0x6000,
         OPCODE_INPUT = 0x7000,
 
-        //To be continued
+        //TODO: To be continued
 
         OPCODE_IPPROG = 0xf800,
         OPCODE_IPPROG_REPLY = 0xf900,
 
-        //To be continued
+        //TODO: To be continued
 
         OPCODE_TIMECODE = 0x9700,
         OPCODE_TIMESYNC = 0x9800,
@@ -99,7 +99,7 @@ namespace ArtNet
         uint8_t versInfo[2]; //Hi,Lo
         uint8_t netSwitch;
         uint8_t subSwitch;
-        uint8_t oem[2];  //Hi,Lo
+        uint8_t oem[2]; //Hi,Lo
         uint8_t ubeaVersion;
         uint8_t status1;
         uint16_t estaMan;

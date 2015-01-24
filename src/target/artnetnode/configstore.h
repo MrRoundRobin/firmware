@@ -10,11 +10,11 @@
 struct ArtNetNodeConfig
 {
     uint8_t howToTalk;
-    ArtNet::PriorityCode diagPriority;
+    ArtNet::PriorityCode diagPriority : 8;
     uint8_t oemCode[2];
     uint8_t estaCode[2];
     char shortName[18];
-    char lonName[64];
+    char longName[64];
     uint8_t portTypes[4];
     uint8_t inputStatus[4];
     uint8_t outputStatus[4];
