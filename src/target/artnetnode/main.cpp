@@ -10,8 +10,6 @@
 
 struct udp_pcb* artnet_udp;
 
-bool configChanged;
-
 union ReceivedPacket
 {
     ReceivedPacket() {};
@@ -46,8 +44,8 @@ void artnet_rx(void* dummy, struct udp_pcb* udp, struct pbuf* p, struct ip_addr*
 
             struct pbuf* buf = pbuf_alloc(PBUF_TRANSPORT, sizeof(ArtNet::MessageArtPollReply), PBUF_RAM);
             if (!buf) break;
-            ArtNet::MessageArtPollReply* reply = (ArtNet::MessageArtPollReply*)buf->payload;
-            *reply = ArtNet::MessageArtPollReply();
+            memset(buf->payload, 0, sizeof(ArtNet::MessageArtPollReply));
+            ArtNet::MessageArtPollReply* reply = new(buf->payload) ArtNet::MessageArtPollReply();
 
             reply->oem[1] = 0xff;
             reply->versInfo[1] = 0x01;
