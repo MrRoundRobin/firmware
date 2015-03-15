@@ -14,15 +14,42 @@ namespace ArtNet
         OPCODE_ADDRESS = 0x6000,
         OPCODE_INPUT = 0x7000,
 
-        //TODO: To be continued
+        OPCODE_TOD_REQUEST = 0x8000,
+        OPCODE_TOD_DATA = 0x8100,
+        OPCODE_TOD_CONTROL = 0x8200,
+
+        OPCODE_RDM = 0x8300,
+        OPCODE_RDM_SUB = 0x8400,
+
+        OPCODE_VIDEO_SETUP = 0xa010,
+        OPCODE_VIDEO_PALETTE = 0xa020,
+        OPCODE_VIDEO_DATA = 0xa040,
+
+        OPCODE_MAC_MASTER = 0xf000,
+        OPCODE_MAC_SLAVE = 0xf100,
+
+        OPCODE_FIRMWARE_MASTER = 0xf200,
+        OPCODE_FIRMWARE_REPLY = 0xf300,
+
+        OPCODE_FILE_TN_MASTER = 0xf400,
+        OPCODE_FILE_FN_MASTER = 0xf500,
+        OPCODE_FILE_FN_REPLY = 0xf600,
 
         OPCODE_IPPROG = 0xf800,
         OPCODE_IPPROG_REPLY = 0xf900,
 
-        //TODO: To be continued
+        OPCODE_MEDIA = 0x9000,
+        OPCODE_MEDIA_PATCH = 0x9100,
+        OPCODE_MEDIA_CONTROL = 0x9200,
+        OPCODE_MEDIA_CONTROL_REPLY = 0x9300,
 
         OPCODE_TIMECODE = 0x9700,
         OPCODE_TIMESYNC = 0x9800,
+
+        OPCODE_TRIGGER = 0x9900,
+
+        OPCODE_DIRECTORY = 0x9a00,
+        OPCODE_DIRECTORY_REPLY = 0x9b00
     };
 
     enum ReportCode
@@ -65,6 +92,39 @@ namespace ArtNet
         PRIORITY_VOLATILE = 0xf0,
     };
 
+    enum AddressCommand
+    {
+        AC_NONE = 0x00,
+
+        AC_CANCEL_MERGE = 0x01,
+
+        AC_LED_NORMAL = 0x02,
+        AC_LED_MUTE = 0x03,
+        AC_LED_LOCATE = 0x04,
+
+        AC_RESET_RXFLAGS = 0x05,
+
+        AC_MERGE_LTP0 = 0x10,
+        AC_MERGE_LTP1 = 0x11,
+        AC_MERGE_LTP2 = 0x12,
+        AC_MERGE_LTP3 = 0x13,
+
+        AC_MERGE_HTP0 = 0x50,
+        AC_MERGE_HTP1 = 0x51,
+        AC_MERGE_HTP2 = 0x52,
+        AC_MERGE_HTP3 = 0x53,
+
+        AC_CLEAR_OP0 = 0x90,
+        AC_CLEAR_OP1 = 0x91,
+        AC_CLEAR_OP2 = 0x92,
+        AC_CLEAR_OP3 = 0x93,
+    };
+
+    enum RdmVersion {
+               RDMVERSION_DRAFT_1 = 0,
+               RDMVERSION_STANDARD_1 = 1
+   };
+
     class __attribute__((packed)) MessageHeader
     {
     public:
@@ -85,7 +145,13 @@ namespace ArtNet
         MessageArtPoll() : MessageHeader(OPCODE_POLL) {}
 
         uint8_t protVer[2]; //Hi,Lo
-        uint8_t talkToMe;
+        struct TalkToMe {
+            uint8_t : 1;
+            uint8_t pushMessages : 1;
+            uint8_t sendDiagnostic : 1;
+            uint8_t broadcast : 1;
+            uint8_t : 4;
+        } talkToMe;
         PriorityCode priority : 8;
     };
 
@@ -101,26 +167,76 @@ namespace ArtNet
         uint8_t subSwitch;
         uint8_t oem[2]; //Hi,Lo
         uint8_t ubeaVersion;
-        uint8_t status1;
+        struct Status1 {
+            uint8_t ubeaPresent : 1;
+            uint8_t rdmCapable  : 1;
+            uint8_t romBooted : 1;
+            uint8_t : 1;
+            enum PortAddressAuthority {
+                PortAddressAuthorityUnknown = 0,
+                PortAddressAuthorityFrontpanel = 1,
+                PortAddressAuthorityNetwork = 2
+            } portAddressAuthority : 2;
+            enum IndecatorState {
+                IndecatorStateUnknown = 0,
+                IndecatorStateLocate = 1,
+                IndecatorStateMute = 2,
+                IndecatorStateNormal = 3
+            } indecatorState : 2;
+        } status1;
         uint16_t estaMan;
         char shortName[18];
         char longName[64];
         uint8_t nodeReport[64];
         uint8_t numPorts[2]; //Hi,Lo
-        uint8_t portTypes[4];
-        uint8_t goodInput[4];
-        uint8_t goodOutputs[4];
+        struct PortTypes {
+            enum Type {
+                PortTypeDmx512 = 0,
+                PortTypeMidi = 1,
+                PortTypeAvab = 2,
+                PortTypeColortranCmx = 3,
+                PortTypeAdb625 = 4,
+                PortTypeArtNet = 5
+            } type : 6;
+            uint8_t input : 1;
+            uint8_t output : 1;
+        } portTypes[4];
+        struct GoodInput {
+            uint8_t : 2;
+            uint8_t errorsReceived : 1;
+            uint8_t disabled : 1;
+            uint8_t textPackages : 1;
+            uint8_t sip : 1; // TODO: what's this?
+            uint8_t testPackages : 1;
+            uint8_t dataReceived : 1;
+        } goodInput[4];
+        struct GoodOutput {
+            uint8_t :1 ;
+            uint8_t ltpMergeMode : 1;
+            uint8_t shortDetected : 1; // TODO: what's this?
+            uint8_t merging : 1;
+            uint8_t textPackages : 1;
+            uint8_t sip : 1;
+            uint8_t testPackages : 1;
+            uint8_t dataTransmited : 1;
+        } goodOutputs[4];
         uint8_t swIn[4];
         uint8_t swOut[4];
         uint8_t swVideo;
-        uint8_t swMacro;
-        uint8_t swRemote;
+        uint8_t  swMacroBitmap;
+        uint8_t swRemoteBitmap;
         uint8_t spare[3]; //unused
         StyleCode style : 8;
         uint8_t mac[6]; //Hi,...,Lo
         uint8_t bindIp[4];
         uint8_t bindIndex;
-        uint8_t status2;
+        struct Status2 {
+                uint8_t supportsBrowserConfiguration : 1;
+                uint8_t dhcpIp : 1;
+                uint8_t dhcpCapable : 1;
+                uint8_t supportsLargePortAddress : 1;
+                uint8_t : 4;
+        } status2;
         uint8_t filler[26]; //unused
     };
 
@@ -144,7 +260,15 @@ namespace ArtNet
 
         uint8_t protVer[2]; //Hi,Lo
         uint8_t filler0[2]; //unused
-        uint8_t command;
+        struct Command {
+            uint8_t programPort : 1;
+            uint8_t programSubnet : 1;
+            uint8_t programIp : 1;
+            uint8_t resetNetConfig : 1;
+            uint8_t : 2;
+            uint8_t enableDhcp : 1;
+            uint8_t enableAnyProgramming : 1;
+        } command;
         uint8_t filler1; //unused
         uint8_t progIp[4]; //Hi,...,Lo
         uint8_t progSubnet[4]; //Hi,...,Lo
@@ -162,7 +286,11 @@ namespace ArtNet
         uint8_t progIp[4]; //Hi,...,Lo
         uint8_t progSubnet[4]; //Hi,...,Lo
         uint8_t progPort[2]; //Hi,Lo
-        uint8_t status;
+        struct Status {
+            uint8_t : 6;
+            uint8_t dhcpEnabled : 1;
+            uint8_t : 1;
+        } status;
         uint8_t spare[7]; //unused
     };
 
@@ -190,7 +318,12 @@ namespace ArtNet
         uint8_t seconds;
         uint8_t minutes;
         uint8_t hours;
-        uint8_t type;
+        enum Type {
+            TypeFilm = 0,       //24fps
+            TypeEbu = 1,        //25fps
+            TypeDf = 2,            //29.97fps
+            TypeSmpte = 3   // 30fps
+        } type : 8;
     };
 
     class __attribute__((packed)) MessageArtInput : MessageHeader
@@ -201,7 +334,10 @@ namespace ArtNet
         uint8_t protVer[2]; //Hi,Lo
         uint8_t filler0[2]; //unused
         uint8_t numPorts[2]; //Hi,Lo
-        uint8_t input[4];
+        struct Input {
+            uint8_t disable : 1;
+            uint8_t : 7;
+        } input[4];
     };
 
     class __attribute__((packed)) MessageArtAddress : MessageHeader
@@ -218,6 +354,132 @@ namespace ArtNet
         uint8_t swOut[4];
         uint8_t subSwitch;
         uint8_t swVideo; // 'Reserved'
-        uint8_t command;
+        AddressCommand command : 8;
     };
-}
+
+    class __attribute__((packed)) MessageArtTrigger : MessageHeader
+    {
+        public:
+            MessageArtTrigger() : MessageHeader(OPCODE_TRIGGER) {}
+
+            uint8_t protVer[2]; //Hi,Lo
+            uint8_t oemCode[2]; //Hi,Lo;
+            enum Key {
+                KeyAscii = 0,
+                KeyMacro = 1,
+                KeySoft = 2,
+                KeyShow = 3
+            } key : 8;
+            uint8_t subKey;
+            uint8_t data[0]; //max: 512
+    };
+
+    class __attribute__((packed)) MessageArtCommand : MessageHeader
+    {
+    public:
+        MessageArtCommand() : MessageHeader(OPCODE_COMMAND) {}
+
+        uint8_t protVer[2]; //Hi,Lo
+        uint8_t estaMan[2]; // Hi,Lo
+        uint8_t length[2]; //Hi,Lo
+        uint8_t data[0]; //max: 512
+    };
+
+    class __attribute__((packed)) MessageArtNzs : MessageHeader
+    {
+    public:
+        MessageArtNzs() : MessageHeader(OPCODE_NZS) {}
+
+        uint8_t protVer[2]; //Hi,Lo
+        uint8_t sequenze;
+        uint8_t startCode;
+        uint16_t universe;
+        uint8_t length[2]; //Hi,Lo
+        uint8_t data[0]; //max: 512
+    };
+
+    class __attribute__((packed)) MessageArtTodRequest : MessageHeader
+     {
+     public:
+        MessageArtTodRequest() : MessageHeader(OPCODE_TOD_REQUEST) {}
+
+        uint8_t protVer[2]; //Hi,Lo
+        uint8_t filler[9];
+        uint8_t net;
+        enum Command {
+            CommandTodFull = 0
+        } command : 8;
+        uint8_t addressLength;
+        uint8_t address[0]; //max: 32
+     };
+
+    class __attribute__((packed)) MessageArtTodData : MessageHeader
+     {
+     public:
+        MessageArtTodData() : MessageHeader(OPCODE_TOD_DATA) {}
+
+        uint8_t protVer[2]; //Hi,Lo
+        RdmVersion rdmVer : 8;
+        uint8_t port;
+        uint8_t filler[7];
+        uint8_t net;
+        enum CommandResponse {
+            CommandResponseTodFull = 0x00,
+            CommandResponseTodNak = 0xff
+        } commandResponse : 8;
+        uint8_t address;
+        uint8_t uidTotal[2]; //Hi, Lo
+        uint8_t blockCount;
+        uint8_t uidCount;
+        //uid 48 * x
+     };
+
+    class __attribute__((packed)) MessageArtTodControl : MessageHeader
+     {
+     public:
+        MessageArtTodControl() : MessageHeader(OPCODE_TOD_CONTROL) {}
+
+        uint8_t protVer[2]; //Hi,Lo
+        uint8_t filler[9];
+        uint8_t net;
+        enum Command {
+            CommandActNone = 0,
+            CommandActFlush = 1
+        } command : 8;
+        uint8_t address;
+     };
+
+    class __attribute__((packed)) MessageArtRdm : MessageHeader
+     {
+     public:
+        MessageArtRdm() : MessageHeader(OPCODE_RDM) {}
+
+        uint8_t protVer[2]; //Hi,Lo
+        RdmVersion rdmVer : 8;
+        uint64_t filler;
+        uint8_t net;
+        enum Command {
+            CommandArtProcess = 0
+        } command : 8;
+        uint8_t address;
+        uint8_t rdmPacket[0]; //max: 512
+     };
+
+    class __attribute__((packed)) MessageArtRdmSub : MessageHeader
+     {
+     public:
+        MessageArtRdmSub() : MessageHeader(OPCODE_RDM_SUB) {}
+
+        uint8_t protVer[2]; //Hi,Lo
+        RdmVersion rdmVer : 8;
+        uint8_t filler1;
+        uint8_t uid[6];
+        uint8_t filler2;
+        uint8_t commandClass; //Todo: see RDM specs
+        uint16_t parameterId;
+        uint16_t subDevice;
+        uint16_t subCount;
+        uint32_t filler3;
+        uint16_t data[0]; //size: 0/subCount
+     };
+ }

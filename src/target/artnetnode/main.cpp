@@ -16,11 +16,23 @@ union ReceivedPacket
     uint32_t d32[0];
     uint8_t d8[0];
     ArtNet::MessageHeader header;
-    ArtNet::MessageArtAddress address;
-    ArtNet::MessageArtDmx dmx;
-    ArtNet::MessageArtInput input;
-    ArtNet::MessageArtIpProg ipProg;
     ArtNet::MessageArtPoll poll;
+    ArtNet::MessageArtIpProgReply pollReply;
+    ArtNet::MessageArtDiagData diagData;
+    ArtNet::MessageArtCommand command;
+    ArtNet::MessageArtDmx dmx;
+    ArtNet::MessageArtNzs nzs;
+    ArtNet::MessageArtAddress address;
+    ArtNet::MessageArtInput input;
+    ArtNet::MessageArtTodRequest todRequest;
+    ArtNet::MessageArtTodData todData;
+    ArtNet::MessageArtTodControl todControl;
+    ArtNet::MessageArtRdm rdm;
+    ArtNet::MessageArtRdmSub rdmSub;
+    ArtNet::MessageArtIpProg ipProg;
+    ArtNet::MessageArtIpProgReply ipProgReply;
+    ArtNet::MessageArtTimecode timecode;
+    ArtNet::MessageArtTrigger trigger;
 } receivedPacket;
 
 void artnet_rx(void* dummy, struct udp_pcb* udp, struct pbuf* p, struct ip_addr* addr, u16_t port)
@@ -37,33 +49,44 @@ void artnet_rx(void* dummy, struct udp_pcb* udp, struct pbuf* p, struct ip_addr*
         {
             if (len != sizeof(ArtNet::MessageArtPoll)) break;
 
-            nodeCfg->diagPriority = receivedPacket.poll.priority;
-            nodeCfg->howToTalk    = receivedPacket.poll.talkToMe;
+            if (nodeCfg->diagPriority != receivedPacket.poll.priority)
+            {
+                nodeCfg->diagPriority = receivedPacket.poll.priority;
+                configChanged = true;
+            }
 
-            configChanged = true;
+            if (memcmp(&nodeCfg->howToTalk, &receivedPacket.poll.talkToMe, sizeof( nodeCfg->howToTalk)))
+            {
+                nodeCfg->howToTalk = receivedPacket.poll.talkToMe;
+                configChanged = true;
+            }
 
             struct pbuf* buf = pbuf_alloc(PBUF_TRANSPORT, sizeof(ArtNet::MessageArtPollReply), PBUF_RAM);
             if (!buf) break;
             memset(buf->payload, 0, sizeof(ArtNet::MessageArtPollReply));
             ArtNet::MessageArtPollReply* reply = new(buf->payload) ArtNet::MessageArtPollReply();
 
-            reply->oem[1] = 0xff;
-            reply->versInfo[1] = 0x01;
-            reply->status1 = reply->status1 && 0b000010; // RDM
-            reply->numPorts[1] = 0x04;
+            setu16be(reply->oem, nodeCfg->oemCode);
+            reply->estaMan = nodeCfg->estaCode;
+            SETU16BE(reply->versInfo,  0x01);
 
-            reply->portTypes[0] = 0xc0; // DMX512 I/O
-            reply->portTypes[1] = 0xc0; // DMX512 I/O
-            reply->portTypes[2] = 0xc0; // DMX512 I/O
-            reply->portTypes[3] = 0xc0; // DMX512 I/O
-            //reply->swRemote = 0xff;
+            reply->status1.rdmCapable = true;
+
+            SETU16BE(reply->numPorts, MAX(DMX_IN_CHANNELS, DMX_OUT_CHANNELS));
+
+            reply->portTypes[0].input = true;
+            reply->portTypes[0].type = ArtNet::MessageArtPollReply::PortTypes::PortTypeDmx512;
 
             memcpy(reply->ipAddress, &netIf.lwipIf.ip_addr, sizeof(reply->ipAddress));
             memcpy(reply->mac, netIf.lwipIf.hwaddr, sizeof(reply->mac));
-            reply->status2 = 0b00001110; // Art-Net 3, DHCP capable, DHCP used
+
+            reply->status2.dhcpCapable = true;
+            reply->status2.supportsLargePortAddress = true;
+            reply->status2.dhcpIp = true;
 
             reply->style = ArtNet::STYLE_NODE;
-            memcpy(reply->shortName, "FLEXperiment", 13);
+            memcpy(reply->shortName, nodeCfg->shortName, sizeof(nodeCfg->shortName));
+            memcpy(reply->longName, nodeCfg->longName, sizeof(nodeCfg->longName));
 
             udp_sendto_if(artnet_udp, buf, IP_ADDR_BROADCAST, 0x1936, &netIf.lwipIf);
             pbuf_free(buf);

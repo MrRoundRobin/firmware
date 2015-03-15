@@ -5,19 +5,16 @@
 #include "artnet_protocol.h"
 
 
-#define ARTNETNODECONFIG_VERSION 0
+#define ARTNETNODECONFIG_VERSION 1
 
 struct ArtNetNodeConfig
 {
-    uint8_t howToTalk;
+    ArtNet::MessageArtPoll::TalkToMe howToTalk;
     ArtNet::PriorityCode diagPriority : 8;
-    uint8_t oemCode[2];
-    uint8_t estaCode[2];
+    uint16_t oemCode;
+    uint16_t estaCode;
     char shortName[18];
     char longName[64];
-    uint8_t portTypes[4];
-    uint8_t inputStatus[4];
-    uint8_t outputStatus[4];
 };
 
 
