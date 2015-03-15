@@ -21,11 +21,11 @@
 #include "lib/fatfs/fatfs.h"
 
 
-OneWire::Bus onewire = OneWire::Bus(PIN_SENSOR);
+OneWire::Bus onewire(PIN_SENSOR);
 DS1820 sensor[MAX_SENSORS];
-SDHC_SPI sd = SDHC_SPI(&STM32::SPI::SPI1, PIN_SD_CS, SD_FREQ);
+SDHC_SPI sd(&STM32::SPI::SPI1, PIN_SD_CS, SD_FREQ);
 FRESULT mountResult;
-FatFs::FileSystem fs = FatFs::FileSystem(&sd, 0, "0:", &mountResult);
+FatFs::FileSystem fs(&sd, 0, "0:", &mountResult);
 uint16_t rtcFrequency;
 int16_t rtcDeviation;
 uint16_t lastTime;
@@ -33,7 +33,7 @@ int timeOffset;
 
 #ifdef HAVE_LCD
 #include "device/pcd8544/pcd8544.h"
-PCD8544 lcd = PCD8544(&STM32::SPI::SPI1, PIN_LCD_CS, LCD_FREQ, PIN_LCD_CD, LCD_BIAS, LCD_TC, LCD_VOP);
+PCD8544 lcd(&STM32::SPI::SPI1, PIN_LCD_CS, LCD_FREQ, PIN_LCD_CD, LCD_BIAS, LCD_TC, LCD_VOP);
 const uint8_t font[] =
 {
     0x20, 0x6d,  // ' ' - 'm'
@@ -216,7 +216,7 @@ void DS1820::wait(int timeout)
 }
 
 
-void __attribute__((noreturn)) error(int number)
+void __attribute__((noreturn)) error(uint32_t number)
 {
 #ifdef HAVE_LCD
     const static char* const errmsg[] =
@@ -242,7 +242,7 @@ void __attribute__((noreturn)) error(int number)
         udelay(1000000);
         GPIO::setLevel(PIN_LED, false);
         udelay(1000000);
-        for (int i = 0; i < number; i++)
+        for (uint32_t i = 0; i < number; i++)
         {
             GPIO::setLevel(PIN_LED, true);
             udelay(50000);
@@ -313,7 +313,7 @@ void readConfig()
     FatFs::FileMode mode = { 0 };
     mode.read = true;
     FRESULT result;
-    FatFs::File file = FatFs::File("/config.txt", mode, &result);
+    FatFs::File file("/config.txt", mode, &result);
     if (result != FR_OK) error(3);
 
     memset(&config, 0, sizeof(config));
@@ -366,18 +366,18 @@ void hexdump(FatFs::File* file, const void* data, int len)
 
 void printNumber(FatFs::File* file, int32_t number)
 {
-    if (file->printf("%d.%03d", number / 1000, ABS(number % 1000)) <= 0) error(7);
+    if (file->printf("%.3D", number) <= 0) error(7);
 }
 
 
 #ifdef HAVE_LCD
 int printTempLCD(int row, char label, int32_t number)
 {
-    return lcd.printf(row, 0, font, 0, "%c:%3d.%03d°C ", label, number / 1000, ABS(number % 1000));
+    return lcd.printf(row, 0, font, 0, "%c:%3.3D°C ", label, number);
 }
 int printVoltLCD(int row, char label, int32_t number)
 {
-    return lcd.printf(row, 50, font, 0, "%c:%d.%03dV ", label, number / 1000, ABS(number % 1000));
+    return lcd.printf(row, 50, font, 0, "%c:%.3DV ", label, number);
 }
 #endif
 
@@ -393,13 +393,19 @@ void openLogFile(FatFs::File* file)
     {
         filename[4] = '0' + i / 10;
         filename[5] = '0' + i % 10;
-        *file = FatFs::File(filename, mode, &result);
+        new(file) FatFs::File(filename, mode, &result);
         if (result == FR_OK) break;
     }
 
     if (result != FR_OK) error(6);
 
-    safePuts(file, "Time");
+    safePuts(file,
+        "nanologger " VERSION
+#ifdef HAVE_LCD
+        " with LCD"
+#endif
+        "\nTime"
+    );
     char sensorNum[] = ";Sensor00";
     for (int i = 0; i < config.sensors; i++)
     {
@@ -452,9 +458,11 @@ void rtcSleep(int until)
     CR.b.ALRAIE = true;
     STM32_RTC_REGS.CR.d32 = CR.d32;
     enter_critical_section();
-    if (until > getTime())
+    while (until > getTime())
     {
+#ifndef DEBUG
         SCB->SCR = SCB_SCR_SLEEPDEEP_Msk;
+#endif
         idle();
         SCB->SCR = 0;
     }
@@ -689,7 +697,7 @@ void initSensors()
     {
         uint64_t* deviceId = onewire.discoverDevice();
         if (!deviceId) error(5);
-        sensor[i] = DS1820(&onewire, *deviceId);
+        new(&sensor[i]) DS1820(&onewire, *deviceId);
         sensor[i].setResolution(config.resolution);
     }
 
@@ -701,7 +709,7 @@ void initSensors()
 int main()
 {
 #ifdef HAVE_LCD
-    lcd.printf(0, 0, font, 0, "nanologger 0.1 by");
+    lcd.printf(0, 0, font, 0, "nanologger " VERSION " by");
     lcd.printf(1, 0, font, 0, "Michael Sparmann");
 #endif
 

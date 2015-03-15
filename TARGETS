@@ -2,7 +2,8 @@ minidisplaydemo/flash
 minidisplaydemo/ram
 nanoblink
 nanologger
-artnetnode/flexperiment/mini/f107/ram
-artnetnode/flexperiment/mini/f107/flash
+artnetnode/flexperiment/mini/f107
 artnetnode/flexperiment/mini/f205/ram
 artnetnode/flexperiment/mini/f205/flash
+dmxfixture/flexperiment/nano/pwm
+dmxfixture/flexperiment/nano/tm1829
