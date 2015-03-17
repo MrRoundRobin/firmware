@@ -1,5 +1,6 @@
 #include "global.h"
 #include "app/main.h"
+#include "lwip/netif.h"
 #include "target/artnetnode/configstore.h"
 #include "target/artnetnode/network.h"
 #include "target/artnetnode/dmx.h"
@@ -24,6 +25,8 @@ union ReceivedPacket
     ArtNet::MessageArtNzs nzs;
     ArtNet::MessageArtAddress address;
     ArtNet::MessageArtInput input;
+    ArtNet::MessageArtFirmwareMaster firmwareMaster;
+    ArtNet::MessageArtFirmwareReply firmwareReply;
     ArtNet::MessageArtTodRequest todRequest;
     ArtNet::MessageArtTodData todData;
     ArtNet::MessageArtTodControl todControl;
@@ -35,6 +38,140 @@ union ReceivedPacket
     ArtNet::MessageArtTrigger trigger;
 } receivedPacket;
 
+void apply_ip_config()
+{
+    if (nodeCfg->useDhcp)
+    {
+        dhcp_start(&netIf.lwipIf);
+    }
+    else
+    {
+        if (netIf.lwipIf.dhcp->state == DHCP_BOUND)
+            dhcp_release(&netIf.lwipIf);
+        dhcp_stop(&netIf.lwipIf);
+
+        netif_set_ipaddr(&netIf.lwipIf, &nodeCfg->ipAddress);
+        netif_set_netmask(&netIf.lwipIf, &nodeCfg->subnet);
+    }
+}
+
+template<typename T> T* alloc_response(struct pbuf** buf, int size, pbuf_type pool)
+{
+    size += sizeof(T);
+    *buf = pbuf_alloc(PBUF_TRANSPORT, size, pool);
+    if (!*buf) return NULL;
+    memset((*buf)->payload, 0, size);
+    return new((*buf)->payload) T();
+}
+
+void artnet_send_poll_reply(ip_addr* destination)
+{
+    struct pbuf* buf;
+    ArtNet::MessageArtPollReply* reply = alloc_response<typeof(*reply)>(&buf, 0, PBUF_RAM);
+    if (!reply) return;
+
+    setu16be(reply->oem, nodeCfg->oemCode);
+    reply->estaMan = nodeCfg->estaCode;
+    SETU16BE(reply->versInfo,  0x01);
+
+    reply->status1.rdmCapable = true;
+
+    SETU16BE(reply->numPorts, MAX(DMX_IN_CHANNELS, DMX_OUT_CHANNELS));
+
+    reply->portTypes[0].input = true;
+    reply->portTypes[0].type = ArtNet::MessageArtPollReply::PortTypes::PortTypeDmx512;
+
+    memcpy(reply->ipAddress, &netIf.lwipIf.ip_addr, sizeof(reply->ipAddress));
+    memcpy(reply->mac, netIf.lwipIf.hwaddr, sizeof(reply->mac));
+
+    reply->status2.dhcpCapable = true;
+    reply->status2.supportsLargePortAddress = true;
+    reply->status2.dhcpIp = true;
+
+    reply->style = ArtNet::STYLE_NODE;
+    memcpy(reply->shortName, nodeCfg->shortName, sizeof(nodeCfg->shortName));
+    memcpy(reply->longName, nodeCfg->longName, sizeof(nodeCfg->longName));
+
+    udp_sendto_if(artnet_udp, buf, destination, 0x1936, &netIf.lwipIf);
+    pbuf_free(buf);
+}
+
+void artnet_handle_poll(ArtNet::MessageArtPoll* req, struct ip_addr* addr, u16_t port)
+{
+    if (nodeCfg->diagPriority != req->priority)
+    {
+        nodeCfg->diagPriority = req->priority;
+        configChanged = true;
+    }
+
+    if (memcmp(&nodeCfg->howToTalk, &req->talkToMe, sizeof(nodeCfg->howToTalk)))
+    {
+        nodeCfg->howToTalk = req->talkToMe;
+
+        configChanged = true;
+    }
+
+    //TODO: handle multiple controllers
+    artnet_send_poll_reply(IP_ADDR_BROADCAST);
+}
+
+void artnet_handle_ipprog(ArtNet::MessageArtIpProg* req, struct ip_addr* addr, u16_t port)
+{
+    if (req->command.enableDhcp || req->command.resetNetConfig)
+    {
+        if(!nodeCfg->useDhcp)
+        {
+            nodeCfg->useDhcp = req->command.enableDhcp;
+            configChanged = true;
+        }
+    }
+    else
+    {
+        if (nodeCfg->useDhcp)
+        {
+            nodeCfg->useDhcp = false;
+            configChanged = true;
+        }
+
+        if ((req->command.programAny || req->command.programIp)
+                && !ip_addr_cmp(&req->progIp, &nodeCfg->ipAddress))
+        {
+            nodeCfg->ipAddress = req->progIp;
+            configChanged = true;
+        }
+
+        if ((req->command.programAny || req->command.programSubnet)
+                && !ip_addr_cmp(&req->progSubnet, &nodeCfg->subnet))
+        {
+            nodeCfg->subnet = req->progSubnet;
+            configChanged = true;
+        }
+    }
+
+    struct pbuf* buf;
+    ArtNet::MessageArtIpProgReply* reply = alloc_response<typeof(*reply)>(&buf, 0, PBUF_RAM);
+    if (!reply) return;
+
+    reply->progIp = nodeCfg->ipAddress;
+    reply->progSubnet = nodeCfg->subnet;
+    SETU16BE(reply->progPort, 0x1936);
+    reply->status.dhcpEnabled = nodeCfg->useDhcp;
+
+    udp_sendto_if(artnet_udp, buf, addr, 0x1936, &netIf.lwipIf);
+    pbuf_free(buf);
+
+    if (configChanged)
+        apply_ip_config();
+}
+
+void artnet_handle_dmx(ArtNet::MessageArtDmx* req, struct ip_addr* addr, u16_t port)
+{
+    //TODO: implement
+}
+
+#define DEFINE_HANDLER(opcode, field, handler) case opcode: if (len == sizeof(typeof(field))) handler(&field, addr, port); break;
+#define DEFINE_HANDLER_VARSIZE(opcode, field, size, handler) case opcode: if (len == sizeof(typeof(field)) + size) handler(&field, addr, port); break;
+
 void artnet_rx(void* dummy, struct udp_pcb* udp, struct pbuf* p, struct ip_addr* addr, u16_t port)
 {
     do
@@ -45,63 +182,10 @@ void artnet_rx(void* dummy, struct udp_pcb* udp, struct pbuf* p, struct ip_addr*
         if (!header->isValid()) break;
         switch (receivedPacket.header.opCode)
         {
-        case ArtNet::OPCODE_POLL:
-        {
-            if (len != sizeof(ArtNet::MessageArtPoll)) break;
-
-            if (nodeCfg->diagPriority != receivedPacket.poll.priority)
-            {
-                nodeCfg->diagPriority = receivedPacket.poll.priority;
-                configChanged = true;
-            }
-
-            if (memcmp(&nodeCfg->howToTalk, &receivedPacket.poll.talkToMe, sizeof( nodeCfg->howToTalk)))
-            {
-                nodeCfg->howToTalk = receivedPacket.poll.talkToMe;
-                configChanged = true;
-            }
-
-            struct pbuf* buf = pbuf_alloc(PBUF_TRANSPORT, sizeof(ArtNet::MessageArtPollReply), PBUF_RAM);
-            if (!buf) break;
-            memset(buf->payload, 0, sizeof(ArtNet::MessageArtPollReply));
-            ArtNet::MessageArtPollReply* reply = new(buf->payload) ArtNet::MessageArtPollReply();
-
-            setu16be(reply->oem, nodeCfg->oemCode);
-            reply->estaMan = nodeCfg->estaCode;
-            SETU16BE(reply->versInfo,  0x01);
-
-            reply->status1.rdmCapable = true;
-
-            SETU16BE(reply->numPorts, MAX(DMX_IN_CHANNELS, DMX_OUT_CHANNELS));
-
-            reply->portTypes[0].input = true;
-            reply->portTypes[0].type = ArtNet::MessageArtPollReply::PortTypes::PortTypeDmx512;
-
-            memcpy(reply->ipAddress, &netIf.lwipIf.ip_addr, sizeof(reply->ipAddress));
-            memcpy(reply->mac, netIf.lwipIf.hwaddr, sizeof(reply->mac));
-
-            reply->status2.dhcpCapable = true;
-            reply->status2.supportsLargePortAddress = true;
-            reply->status2.dhcpIp = true;
-
-            reply->style = ArtNet::STYLE_NODE;
-            memcpy(reply->shortName, nodeCfg->shortName, sizeof(nodeCfg->shortName));
-            memcpy(reply->longName, nodeCfg->longName, sizeof(nodeCfg->longName));
-
-            udp_sendto_if(artnet_udp, buf, IP_ADDR_BROADCAST, 0x1936, &netIf.lwipIf);
-            pbuf_free(buf);
-            break;
-        }
-
-        case ArtNet::OPCODE_DMX:
-        {
-            if (len < sizeof(ArtNet::MessageArtDmx)) break;
-            //TODO: Implement
-            break;
-        }
-
-        default:
-            break;
+            DEFINE_HANDLER(ArtNet::OPCODE_POLL, receivedPacket.poll, artnet_handle_poll)
+            DEFINE_HANDLER(ArtNet::OPCODE_IPPROG, receivedPacket.ipProg, artnet_handle_ipprog)
+            DEFINE_HANDLER_VARSIZE(ArtNet::OPCODE_DMX, receivedPacket.dmx, GETU16BE(receivedPacket.dmx.length), artnet_handle_dmx)
+            default: break;
         }
     }
     while (false);
@@ -116,7 +200,7 @@ int main()
     initNetwork();
     lateInit();
 
-    dhcp_start(&netIf.lwipIf);
+    apply_ip_config();
 
     artnet_udp = udp_new();
     udp_bind(artnet_udp, IP_ADDR_ANY, 0x1936);

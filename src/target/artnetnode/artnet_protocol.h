@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lwip/ip_addr.h"
+
 namespace ArtNet
 {
 
@@ -141,8 +143,11 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtPoll : MessageHeader
     {
+        // Controller:  r-b
+        // Node:        r--
+        // Media:       r--
     public:
-        MessageArtPoll() : MessageHeader(OPCODE_POLL) {}
+        MessageArtPoll() : MessageHeader(OPCODE_POLL), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
         struct TalkToMe {
@@ -157,6 +162,9 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtPollReply : MessageHeader
     {
+        // Controller: r-b
+        // Node:       --b
+        // Media:      --b
     public:
         MessageArtPollReply() : MessageHeader(OPCODE_POLL_REPLY), port(0x1936) {}
 
@@ -169,7 +177,7 @@ namespace ArtNet
         uint8_t ubeaVersion;
         struct Status1 {
             uint8_t ubeaPresent : 1;
-            uint8_t rdmCapable  : 1;
+            uint8_t rdmCapable : 1;
             uint8_t romBooted : 1;
             uint8_t : 1;
             enum PortAddressAuthority {
@@ -211,7 +219,7 @@ namespace ArtNet
             uint8_t dataReceived : 1;
         } goodInput[4];
         struct GoodOutput {
-            uint8_t :1 ;
+            uint8_t : 1;
             uint8_t ltpMergeMode : 1;
             uint8_t shortDetected : 1; // TODO: what's this?
             uint8_t merging : 1;
@@ -223,9 +231,9 @@ namespace ArtNet
         uint8_t swIn[4];
         uint8_t swOut[4];
         uint8_t swVideo;
-        uint8_t  swMacroBitmap;
+        uint8_t swMacroBitmap;
         uint8_t swRemoteBitmap;
-        uint8_t spare[3]; //unused
+        uint32_t : 24; //unused
         StyleCode style : 8;
         uint8_t mac[6]; //Hi,...,Lo
         uint8_t bindIp[4];
@@ -242,8 +250,11 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtDmx : MessageHeader
     {
+        // Controller: ru-
+        // Node:       ru-
+        // Media:      ru-
     public:
-        MessageArtDmx() : MessageHeader(OPCODE_DMX) {}
+        MessageArtDmx() : MessageHeader(OPCODE_DMX), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
         uint8_t sequenze;
@@ -255,11 +266,14 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtIpProg : MessageHeader
     {
+        // Controller: -u-
+        // Node:       r--
+        // Media:      r--
     public:
-        MessageArtIpProg() : MessageHeader(OPCODE_IPPROG) {}
+        MessageArtIpProg() : MessageHeader(OPCODE_IPPROG), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
-        uint8_t filler0[2]; //unused
+        uint16_t : 16; //unused
         struct Command {
             uint8_t programPort : 1;
             uint8_t programSubnet : 1;
@@ -267,53 +281,64 @@ namespace ArtNet
             uint8_t resetNetConfig : 1;
             uint8_t : 2;
             uint8_t enableDhcp : 1;
-            uint8_t enableAnyProgramming : 1;
+            uint8_t programAny : 1;
         } command;
-        uint8_t filler1; //unused
-        uint8_t progIp[4]; //Hi,...,Lo
-        uint8_t progSubnet[4]; //Hi,...,Lo
+        uint8_t : 8; //unused
+        ip_addr progIp;
+        ip_addr progSubnet;
         uint8_t progPort[2]; //Hi,Lo
-        uint8_t spare[8];
+        uint64_t : 64;
+
+        //TODO: find place for gateway
     };
 
     class __attribute__((packed)) MessageArtIpProgReply : MessageHeader
     {
+        // Controller: r--
+        // Node:       -u-
+        // Media:      -u-
     public:
-        MessageArtIpProgReply() : MessageHeader(OPCODE_IPPROG_REPLY) {}
+        MessageArtIpProgReply() : MessageHeader(OPCODE_IPPROG_REPLY), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
-        uint8_t filler0[4]; //unused
-        uint8_t progIp[4]; //Hi,...,Lo
-        uint8_t progSubnet[4]; //Hi,...,Lo
+        uint32_t : 32; //unused
+        ip_addr progIp;
+        ip_addr progSubnet;
         uint8_t progPort[2]; //Hi,Lo
         struct Status {
             uint8_t : 6;
             uint8_t dhcpEnabled : 1;
             uint8_t : 1;
         } status;
-        uint8_t spare[7]; //unused
+        uint64_t : 56; //unused
     };
 
     class __attribute__((packed)) MessageArtDiagData : MessageHeader
     {
+        // Controller: rub
+        // Node:       -ub
+        // Media:      -ub
     public:
-        MessageArtDiagData() : MessageHeader(OPCODE_DIAG_DATA) {}
+        MessageArtDiagData() : MessageHeader(OPCODE_DIAG_DATA), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
-        uint8_t filler0; //unused
+        uint8_t : 8; //unused
         PriorityCode priority : 8;
-        uint8_t filler1[2]; //unused
+        uint16_t : 16; //unused
         uint8_t length[2]; //Hi,Lo
         uint8_t data[0];
     };
 
     class __attribute__((packed)) MessageArtTimecode : MessageHeader
     {
+        // Controller: rub
+        // Node:       rub
+        // Media:      rub
     public:
-        MessageArtTimecode() : MessageHeader(OPCODE_TIMECODE) {}
+        MessageArtTimecode() : MessageHeader(OPCODE_TIMECODE), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
-        uint8_t filler0[2]; //unused
+        uint16_t : 16; //unused
         uint8_t frames;
         uint8_t seconds;
         uint8_t minutes;
@@ -328,11 +353,14 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtInput : MessageHeader
     {
+        // Controller: -u-
+        // Node:       r--
+        // Media:      r--
     public:
-        MessageArtInput() : MessageHeader(OPCODE_INPUT) {}
+        MessageArtInput() : MessageHeader(OPCODE_INPUT), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
-        uint8_t filler0[2]; //unused
+        uint16_t : 16; //unused
         uint8_t numPorts[2]; //Hi,Lo
         struct Input {
             uint8_t disable : 1;
@@ -342,12 +370,15 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtAddress : MessageHeader
     {
+        // Controller: -u-
+        // Node:       r--
+        // Media:      r--
     public:
-        MessageArtAddress() : MessageHeader(OPCODE_ADDRESS) {}
+        MessageArtAddress() : MessageHeader(OPCODE_ADDRESS), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
         uint8_t netSwitch;
-        uint8_t filler0; //unused
+        uint8_t : 8; //unused
         char shortName[18];
         char longName[64];
         uint8_t swIn[4];
@@ -359,8 +390,11 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtTrigger : MessageHeader
     {
+        // Controller: rub
+        // Node:       rub
+        // Media:      rub
         public:
-            MessageArtTrigger() : MessageHeader(OPCODE_TRIGGER) {}
+            MessageArtTrigger() : MessageHeader(OPCODE_TRIGGER), protVer{0x00, 0x0e} {}
 
             uint8_t protVer[2]; //Hi,Lo
             uint8_t oemCode[2]; //Hi,Lo;
@@ -376,8 +410,11 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtCommand : MessageHeader
     {
+        // Controller: rub
+        // Node:       rub
+        // Media:      rub
     public:
-        MessageArtCommand() : MessageHeader(OPCODE_COMMAND) {}
+        MessageArtCommand() : MessageHeader(OPCODE_COMMAND), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
         uint8_t estaMan[2]; // Hi,Lo
@@ -387,8 +424,11 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtNzs : MessageHeader
     {
+        // Controller: ru-
+        // Node:       ru-
+        // Media:      ru-
     public:
-        MessageArtNzs() : MessageHeader(OPCODE_NZS) {}
+        MessageArtNzs() : MessageHeader(OPCODE_NZS), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
         uint8_t sequenze;
@@ -398,13 +438,61 @@ namespace ArtNet
         uint8_t data[0]; //max: 512
     };
 
-    class __attribute__((packed)) MessageArtTodRequest : MessageHeader
+    class __attribute__((packed)) MessageArtFirmwareMaster : MessageHeader
      {
+        // Controller: -u-
+        // Node:       r--
+        // Media:      r--
      public:
-        MessageArtTodRequest() : MessageHeader(OPCODE_TOD_REQUEST) {}
+        MessageArtFirmwareMaster() : MessageHeader(OPCODE_FIRMWARE_MASTER), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
-        uint8_t filler[9];
+        uint16_t : 16;
+        enum Type {
+            TypeFirmFirst = 0x00,
+            TypeFirmCont = 0x01,
+            TypeFirmLast = 0x02,
+            TypeUbeaFirst = 0x03,
+            TypeUbeaCont = 0x04,
+            TypeUbeaLast = 0x05
+        } type : 8;
+        uint8_t blockId;
+        uint8_t length[4]; //Hi,...,Lo
+        uint32_t : 20;
+        uint16_t data[512];
+     };
+
+    class __attribute__((packed)) MessageArtFirmwareReply : MessageHeader
+     {
+        // Controller: r--
+        // Node:       -u-
+        // Media:      -u-
+     public:
+        MessageArtFirmwareReply() : MessageHeader(OPCODE_FIRMWARE_REPLY), protVer{0x00, 0x0e} {}
+
+        uint8_t protVer[2]; //Hi,Lo
+        uint16_t : 16;
+        enum Type {
+            TypeFirmBlockGood = 0x00,
+            TypeFirmAllGood = 0x01,
+            TypeFirmFail = 0xff
+        } type : 8;
+        uint64_t : 64;
+        uint64_t : 64;
+        uint64_t : 40;
+     };
+
+    class __attribute__((packed)) MessageArtTodRequest : MessageHeader
+     {
+        // Controller: --b
+        // Node:       r-b
+        // Media:      ---
+     public:
+        MessageArtTodRequest() : MessageHeader(OPCODE_TOD_REQUEST), protVer{0x00, 0x0e} {}
+
+        uint8_t protVer[2]; //Hi,Lo
+        uint64_t : 64;
+        uint8_t : 8;
         uint8_t net;
         enum Command {
             CommandTodFull = 0
@@ -415,13 +503,16 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtTodData : MessageHeader
      {
+        // Controller: r--
+        // Node:       r-b
+        // Media:      ---
      public:
-        MessageArtTodData() : MessageHeader(OPCODE_TOD_DATA) {}
+        MessageArtTodData() : MessageHeader(OPCODE_TOD_DATA), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
         RdmVersion rdmVer : 8;
         uint8_t port;
-        uint8_t filler[7];
+        uint64_t : 56;
         uint8_t net;
         enum CommandResponse {
             CommandResponseTodFull = 0x00,
@@ -436,11 +527,15 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtTodControl : MessageHeader
      {
+        // Controller: --b
+        // Node:       r-b
+        // Media:      ---
      public:
-        MessageArtTodControl() : MessageHeader(OPCODE_TOD_CONTROL) {}
+        MessageArtTodControl() : MessageHeader(OPCODE_TOD_CONTROL), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
-        uint8_t filler[9];
+        uint8_t : 8;
+        uint64_t : 64;
         uint8_t net;
         enum Command {
             CommandActNone = 0,
@@ -451,12 +546,15 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtRdm : MessageHeader
      {
+        // Controller: -ub
+        // Node:       rub
+        // Media:      ---
      public:
-        MessageArtRdm() : MessageHeader(OPCODE_RDM) {}
+        MessageArtRdm() : MessageHeader(OPCODE_RDM), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
         RdmVersion rdmVer : 8;
-        uint64_t filler;
+        uint64_t : 64;
         uint8_t net;
         enum Command {
             CommandArtProcess = 0
@@ -467,19 +565,22 @@ namespace ArtNet
 
     class __attribute__((packed)) MessageArtRdmSub : MessageHeader
      {
+        // Controller: ru-
+        // Node:       ru-
+        // Media:      ---
      public:
-        MessageArtRdmSub() : MessageHeader(OPCODE_RDM_SUB) {}
+        MessageArtRdmSub() : MessageHeader(OPCODE_RDM_SUB), protVer{0x00, 0x0e} {}
 
         uint8_t protVer[2]; //Hi,Lo
         RdmVersion rdmVer : 8;
-        uint8_t filler1;
+        uint8_t : 8;
         uint8_t uid[6];
-        uint8_t filler2;
+        uint8_t : 8;
         uint8_t commandClass; //Todo: see RDM specs
         uint16_t parameterId;
         uint16_t subDevice;
         uint16_t subCount;
-        uint32_t filler3;
+        uint32_t : 32;
         uint16_t data[0]; //size: 0/subCount
      };
- }
+}

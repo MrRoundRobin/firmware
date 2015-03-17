@@ -16,6 +16,12 @@ void upgradeNodeConfig(int oldVersion, int oldSize)
        memcpy(nodeCfg->longName, "FLEXperiment", 13);
        memcpy(nodeCfg->shortName, "FLEXperiment", 13);
 
-       configChanged = true;
+       oldVersion = 1;
+       /* no break */
+
+    case 1:
+        nodeCfg->useDhcp = true;
+
+        oldVersion = 2;
     }
 }
