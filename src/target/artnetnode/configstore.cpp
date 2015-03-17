@@ -13,15 +13,12 @@ void upgradeNodeConfig(int oldVersion, int oldSize)
        nodeCfg->estaCode = 0x7fff;
        nodeCfg->howToTalk.broadcast = true;
 
-       memcpy(nodeCfg->longName, "FLEXperiment", 13);
-       memcpy(nodeCfg->shortName, "FLEXperiment", 13);
+       SET_STRING(nodeCfg->longName, "FLEXperiment");
+       SET_STRING(nodeCfg->shortName, "FLEXperiment");
 
-       oldVersion = 1;
        /* no break */
 
     case 1:
         nodeCfg->useDhcp = true;
-
-        oldVersion = 2;
     }
 }

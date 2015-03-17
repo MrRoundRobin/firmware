@@ -33,5 +33,4 @@ Ethernet::Interface netIf(&netDriver, 1500, addrGen.address);
 
 void initNetwork()
 {
-    netIf.lwipIf.hostname = "flexperiment";
 }

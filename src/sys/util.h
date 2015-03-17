@@ -156,4 +156,6 @@ static inline uint16_t getu16be(const uint8_t* addr) { return betoh16(*((uint16_
 #define SETU16BE(addr, data) do { *((uint16_t*)addr) = H_TO_BE16(data); } while (false);
 static inline void setu16be(uint8_t* addr, uint16_t data) { *((uint16_t*)addr) = htobe16(data); }
 
+#define SET_STRING(ptr, str) memcpy(ptr, str, sizeof(str))
+
 #endif

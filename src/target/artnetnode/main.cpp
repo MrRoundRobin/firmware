@@ -200,6 +200,7 @@ int main()
     initNetwork();
     lateInit();
 
+    netIf.lwipIf.hostname = nodeCfg->shortName;
     apply_ip_config();
 
     artnet_udp = udp_new();
